@@ -86,6 +86,12 @@ export async function POST(request) {
     
     const inventoryResponse = await fetch(officialApiUrl);
     
+    // Add specific handling for the 410 GONE error.
+    if (inventoryResponse.status === 410) {
+        console.error('Official Steam API responded with 410 Gone. This is a critical error from Steam\'s side, likely related to the API key or IP blocking.');
+        return NextResponse.json({ message: `Steam's API is reporting that the resource is permanently gone (Error 410). This may be an issue with the API key's permissions or a temporary problem on Steam's end.` }, { status: 500 });
+    }
+
     if (!inventoryResponse.ok) {
         console.error(`Official Steam API responded with status: ${inventoryResponse.status} ${inventoryResponse.statusText}`);
         return NextResponse.json({ message: `Failed to fetch from the official Steam API. Status: ${inventoryResponse.status}` }, { status: 500 });
