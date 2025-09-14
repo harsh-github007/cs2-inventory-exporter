@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
+const CS2_APP_ID = 730;
 
 // Helper to extract the relevant part of the profile URL
 function extractIdentifier(url) {
@@ -8,9 +9,11 @@ function extractIdentifier(url) {
         const urlObj = new URL(url);
         const pathParts = urlObj.pathname.split('/').filter(part => part);
         if (pathParts[0] && pathParts[1]) {
+            // Handles both /id/ and /profiles/
             return pathParts[1];
         }
     } catch (e) {
+        // Fallback for non-URL strings or malformed URLs
         return url.split('/').pop();
     }
     return null;
@@ -23,7 +26,7 @@ function convertToCSV(data) {
   const csvRows = [headers.join(',')];
   for (const row of data) {
     const values = headers.map(header => {
-      const escaped = ('' + row[header]).replace(/"/g, '""');
+      const escaped = ('' + row[header]).replace(/"/g, '""'); // Escapes double quotes
       return `"${escaped}"`;
     });
     csvRows.push(values.join(','));
@@ -64,39 +67,45 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Invalid Steam profile URL format.' }, { status: 400 });
     }
 
-    const inventoryResponse = await fetch(`https://api.steampowered.com/IEconItems_730/GetPlayerItems/v1/?key=${STEAM_API_KEY}&steamid=${steamId}`);
-    
+    // --- Reverting to the more detailed community endpoint with a User-Agent header ---
+    const inventoryResponse = await fetch(`https://steamcommunity.com/inventory/${steamId}/${CS2_APP_ID}/2?l=english&count=5000`, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+        }
+    });
+
     if (!inventoryResponse.ok) {
-        // DEBUGGING: Log the status text from the failed response
-        console.error(`Steam API responded with status: ${inventoryResponse.status} ${inventoryResponse.statusText}`);
-        return NextResponse.json({ message: `Failed to fetch from the official Steam API. Status: ${inventoryResponse.status}` }, { status: 500 });
+        console.error(`Steam Community API responded with status: ${inventoryResponse.status} ${inventoryResponse.statusText}`);
+        return NextResponse.json({ message: `Inventory is private or profile is invalid. Status: ${inventoryResponse.status}` }, { status: 403 });
     }
 
     const inventoryData = await inventoryResponse.json();
-
-    if (!inventoryData.result || inventoryData.result.status !== 1) {
-        return NextResponse.json({ message: 'Inventory is private or the profile is invalid. (Checked with official API)' }, { status: 403 });
+    
+    if (!inventoryData || !inventoryData.assets || !inventoryData.descriptions) {
+      return NextResponse.json({ message: 'Could not read inventory data. It might be empty or there is a temporary Steam API issue.' }, { status: 404 });
     }
     
-    const items = inventoryData.result.items;
-
-    if (!items || items.length === 0) {
+    if (inventoryData.assets.length === 0) {
       return NextResponse.json({ message: 'This inventory is empty.' }, { status: 404 });
     }
+
+    const descriptionMap = new Map(inventoryData.descriptions.map(desc => [`${desc.classid}_${desc.instanceid}`, desc]));
     
-    const itemsForCSV = items.map(item => {
+    const itemsForCSV = inventoryData.assets.map(asset => {
+        const description = descriptionMap.get(`${asset.classid}_${asset.instanceid}`);
         return {
-            "Item_ID": item.id,
-            "Original_ID": item.original_id,
-            "Def_Index": item.defindex,
-            "Level": item.level,
-            "Quality": item.quality,
-            "Quantity": item.quantity,
+            "Item_Name": description?.market_hash_name || "Unknown Item",
+            "Type": description?.type || "Unknown",
+            "Tradable": description?.tradable ? "Yes" : "No",
+            "Marketable": description?.marketable ? "Yes" : "No",
+            "Class_ID": asset.classid,
+            "Instance_ID": asset.instanceid,
+            "Asset_ID": asset.assetid,
         };
     });
-
+    
     const csvData = convertToCSV(itemsForCSV);
-    const fileName = `cs2_inventory_basic_${steamId}.csv`;
+    const fileName = `cs2_inventory_${steamId}.csv`;
 
     return new Response(csvData, {
       status: 200,
@@ -107,7 +116,6 @@ export async function POST(request) {
     });
 
   } catch (error) {
-    // DEBUGGING: Log the full error to see the exact reason for the fetch failure.
     console.error('Full API Route Error:', error);
     return NextResponse.json({ message: 'An unexpected server error occurred.', errorDetails: error.message }, { status: 500 });
   }
