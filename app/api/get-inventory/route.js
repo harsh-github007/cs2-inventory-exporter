@@ -68,7 +68,12 @@ export async function POST(request) {
     }
 
     // --- Reverting to the more detailed community endpoint with a User-Agent header ---
-    const inventoryResponse = await fetch(`https://steamcommunity.com/inventory/${steamId}/${CS2_APP_ID}/2?l=english&count=5000`, {
+    const inventoryUrl = `https://steamcommunity.com/inventory/${steamId}/${CS2_APP_ID}/2?l=english&count=5000`;
+    
+    // DEBUGGING: Log the exact URL being requested to diagnose 400 errors.
+    console.log(`Requesting inventory URL: ${inventoryUrl}`);
+
+    const inventoryResponse = await fetch(inventoryUrl, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
         }
