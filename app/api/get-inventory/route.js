@@ -39,6 +39,9 @@ export async function POST(request) {
     return NextResponse.json({ message: 'Steam API key is not configured on the server.' }, { status: 500 });
   }
 
+  // DEBUGGING: Log the last 4 characters of the key to verify it's loaded.
+  console.log(`Server is using an API Key ending in: ...${STEAM_API_KEY.slice(-4)}`);
+
   if (!profileUrl) {
     return NextResponse.json({ message: 'Profile URL is required.' }, { status: 400 });
   }
@@ -61,18 +64,17 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Invalid Steam profile URL format.' }, { status: 400 });
     }
 
-    // --- FINAL ATTEMPT: Using the official, more reliable Web API endpoint ---
     const inventoryResponse = await fetch(`https://api.steampowered.com/IEconItems_730/GetPlayerItems/v1/?key=${STEAM_API_KEY}&steamid=${steamId}`);
     
     if (!inventoryResponse.ok) {
-        return NextResponse.json({ message: 'Failed to fetch from the official Steam API.' }, { status: 500 });
+        // DEBUGGING: Log the status text from the failed response
+        console.error(`Steam API responded with status: ${inventoryResponse.status} ${inventoryResponse.statusText}`);
+        return NextResponse.json({ message: `Failed to fetch from the official Steam API. Status: ${inventoryResponse.status}` }, { status: 500 });
     }
 
     const inventoryData = await inventoryResponse.json();
 
-    // The official API has a different structure for errors
     if (!inventoryData.result || inventoryData.result.status !== 1) {
-        // Status 15 = private profile, status 8 = invalid id
         return NextResponse.json({ message: 'Inventory is private or the profile is invalid. (Checked with official API)' }, { status: 403 });
     }
     
@@ -82,7 +84,6 @@ export async function POST(request) {
       return NextResponse.json({ message: 'This inventory is empty.' }, { status: 404 });
     }
     
-    // NOTE: This API does NOT provide market_hash_name. The CSV will be more basic.
     const itemsForCSV = items.map(item => {
         return {
             "Item_ID": item.id,
@@ -106,8 +107,9 @@ export async function POST(request) {
     });
 
   } catch (error) {
-    console.error('API Route Error:', error);
-    return NextResponse.json({ message: 'An unexpected server error occurred.' }, { status: 500 });
+    // DEBUGGING: Log the full error to see the exact reason for the fetch failure.
+    console.error('Full API Route Error:', error);
+    return NextResponse.json({ message: 'An unexpected server error occurred.', errorDetails: error.message }, { status: 500 });
   }
 }
 
