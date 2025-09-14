@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
-const CS2_APP_ID = 730;
 
 // Helper to extract the relevant part of the profile URL
 function extractIdentifier(url) {
@@ -9,11 +8,9 @@ function extractIdentifier(url) {
         const urlObj = new URL(url);
         const pathParts = urlObj.pathname.split('/').filter(part => part);
         if (pathParts[0] && pathParts[1]) {
-            // Handles both /id/ and /profiles/
             return pathParts[1];
         }
     } catch (e) {
-        // Fallback for non-URL strings or malformed URLs
         return url.split('/').pop();
     }
     return null;
@@ -26,7 +23,7 @@ function convertToCSV(data) {
   const csvRows = [headers.join(',')];
   for (const row of data) {
     const values = headers.map(header => {
-      const escaped = ('' + row[header]).replace(/"/g, '""'); // Escapes double quotes
+      const escaped = ('' + row[header]).replace(/"/g, '""');
       return `"${escaped}"`;
     });
     csvRows.push(values.join(','));
@@ -64,47 +61,41 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Invalid Steam profile URL format.' }, { status: 400 });
     }
 
-    // --- NEW ROBUST METHOD ---
-    // STEP 1: Use the more reliable endpoint to get the inventory assets and descriptions.
-    // This endpoint can sometimes fail even on public profiles for various reasons (trade bans, etc.)
-    const inventoryResponse = await fetch(`https://steamcommunity.com/inventory/${steamId}/${CS2_APP_ID}/2?l=english&count=5000`);
-
+    // --- FINAL ATTEMPT: Using the official, more reliable Web API endpoint ---
+    const inventoryResponse = await fetch(`https://api.steampowered.com/IEconItems_730/GetPlayerItems/v1/?key=${STEAM_API_KEY}&steamid=${steamId}`);
+    
     if (!inventoryResponse.ok) {
-        // This will catch 403 Forbidden (private), 404 Not Found, 500 Server Error etc.
-        // It's the most common failure point for profiles that appear public but are restricted.
-        return NextResponse.json({ message: 'Inventory is private or profile is invalid. (Steam API returned an error)' }, { status: 403 });
+        return NextResponse.json({ message: 'Failed to fetch from the official Steam API.' }, { status: 500 });
     }
 
     const inventoryData = await inventoryResponse.json();
-    
-    // Check for a valid response structure from Steam
-    if (!inventoryData || !inventoryData.assets || !inventoryData.descriptions) {
-      // Sometimes Steam returns a success status but an empty/malformed response.
-      return NextResponse.json({ message: 'Could not read inventory data. It might be empty or there is a temporary Steam API issue.' }, { status: 404 });
+
+    // The official API has a different structure for errors
+    if (!inventoryData.result || inventoryData.result.status !== 1) {
+        // Status 15 = private profile, status 8 = invalid id
+        return NextResponse.json({ message: 'Inventory is private or the profile is invalid. (Checked with official API)' }, { status: 403 });
     }
     
-    if (inventoryData.assets.length === 0) {
+    const items = inventoryData.result.items;
+
+    if (!items || items.length === 0) {
       return NextResponse.json({ message: 'This inventory is empty.' }, { status: 404 });
     }
-
-    // Create a lookup map for descriptions for efficiency
-    const descriptionMap = new Map(inventoryData.descriptions.map(desc => [`${desc.classid}_${desc.instanceid}`, desc]));
     
-    const itemsForCSV = inventoryData.assets.map(asset => {
-        const description = descriptionMap.get(`${asset.classid}_${asset.instanceid}`);
+    // NOTE: This API does NOT provide market_hash_name. The CSV will be more basic.
+    const itemsForCSV = items.map(item => {
         return {
-            "Item_Name": description?.market_hash_name || "Unknown Item",
-            "Type": description?.type || "Unknown",
-            "Tradable": description?.tradable ? "Yes" : "No",
-            "Marketable": description?.marketable ? "Yes" : "No",
-            "Class_ID": asset.classid,
-            "Instance_ID": asset.instanceid,
-            "Asset_ID": asset.assetid,
+            "Item_ID": item.id,
+            "Original_ID": item.original_id,
+            "Def_Index": item.defindex,
+            "Level": item.level,
+            "Quality": item.quality,
+            "Quantity": item.quantity,
         };
     });
-    
+
     const csvData = convertToCSV(itemsForCSV);
-    const fileName = `cs2_inventory_${steamId}.csv`;
+    const fileName = `cs2_inventory_basic_${steamId}.csv`;
 
     return new Response(csvData, {
       status: 200,
