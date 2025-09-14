@@ -3,21 +3,36 @@ import { NextResponse } from 'next/server';
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
 const CS2_APP_ID = 730;
 
-// Helper to extract the relevant part of the profile URL
+// --- NEW, MORE ROBUST HELPER FUNCTION ---
+// This function is specifically designed to correctly find the Steam ID
+// from various URL formats, including the one you provided.
 function extractIdentifier(url) {
     try {
-        const urlObj = new URL(url);
-        const pathParts = urlObj.pathname.split('/').filter(part => part);
-        if (pathParts[0] && pathParts[1]) {
-            // Handles both /id/ and /profiles/
-            return pathParts[1];
+        // Clean up URL to handle variations like trailing slashes
+        const cleanUrl = url.trim().replace(/\/$/, '');
+        const parts = cleanUrl.split('/');
+        
+        // Find the keyword 'profiles' or 'id' and get the next part of the URL
+        const profilesIndex = parts.indexOf('profiles');
+        if (profilesIndex !== -1 && parts.length > profilesIndex + 1) {
+            return parts[profilesIndex + 1];
+        }
+        
+        const idIndex = parts.indexOf('id');
+        if (idIndex !== -1 && parts.length > idIndex + 1) {
+            return parts[idIndex + 1];
+        }
+
+        // Fallback for simple vanity names or IDs
+        if(parts.length > 0) {
+            return parts[parts.length - 1];
         }
     } catch (e) {
-        // Fallback for non-URL strings or malformed URLs
-        return url.split('/').pop();
+        console.error("URL parsing failed:", e);
     }
     return null;
 }
+
 
 // Helper to convert array of objects to CSV string
 function convertToCSV(data) {
@@ -53,9 +68,15 @@ export async function POST(request) {
     let steamId;
     const identifier = extractIdentifier(profileUrl);
 
+    console.log(`Extracted Identifier: ${identifier}`); // Log what was extracted
+
+    if (!identifier) {
+        return NextResponse.json({ message: 'Could not extract a valid identifier from the URL.' }, { status: 400 });
+    }
+
     if (/^\d{17}$/.test(identifier)) {
       steamId = identifier;
-    } else if (identifier) {
+    } else {
       const vanityResponse = await fetch(`https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key=${STEAM_API_KEY}&vanityurl=${identifier}`);
       const vanityData = await vanityResponse.json();
       
@@ -63,14 +84,12 @@ export async function POST(request) {
         return NextResponse.json({ message: 'Could not find a Steam ID for this profile URL.' }, { status: 404 });
       }
       steamId = vanityData.response.steamid;
-    } else {
-      return NextResponse.json({ message: 'Invalid Steam profile URL format.' }, { status: 400 });
     }
+    
+    console.log(`Resolved SteamID: ${steamId}`); // Log the final ID
 
-    // --- Reverting to the more detailed community endpoint with a User-Agent header ---
     const inventoryUrl = `https://steamcommunity.com/inventory/${steamId}/${CS2_APP_ID}/2?l=english&count=5000`;
     
-    // DEBUGGING: Log the exact URL being requested to diagnose 400 errors.
     console.log(`Requesting inventory URL: ${inventoryUrl}`);
 
     const inventoryResponse = await fetch(inventoryUrl, {
