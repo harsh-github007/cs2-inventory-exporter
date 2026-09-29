@@ -2,6 +2,8 @@
 
 Export any public Counter-Strike 2 inventory to a CSV file, with item names, wear, rarity, collection and trade status.
 
+**Live app:** https://cs2-inventory-exporter-auxo.vercel.app/
+
 ![Inventory loaded and sorted by rarity](docs/screenshot.png)
 
 ## Features
@@ -41,7 +43,7 @@ npm run lint
 
 ## Deploying
 
-Import the repository on [Vercel](https://vercel.com/new). No configuration is needed.
+The live app runs on Vercel. To deploy your own copy, import the repository on [Vercel](https://vercel.com/new); no configuration is needed. Pushes to `main` redeploy automatically.
 
 Steam rate-limits inventory requests per IP address, and shared hosting IPs hit that limit sooner. If users regularly see the rate-limit message, deploy to a platform with a dedicated outbound IP or add a longer-lived cache such as Vercel KV.
 
