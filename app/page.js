@@ -106,10 +106,11 @@ export default function HomePage() {
       </header>
 
       <main className="flex-1">
-        <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-12 sm:pt-16 pb-8">
-          <p className="eyebrow">Counter-Strike 2 · Steam inventory</p>
-          <h1 className="mt-4 text-4xl sm:text-5xl font-medium tracking-tighter text-balance max-w-3xl">
-            Every skin, case and sticker, <span className="text-accent">in one spreadsheet</span>
+        <div className="hero-grid border-b border-line">
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 sm:pt-24 pb-12">
+          <p className="eyebrow">[ Counter-Strike 2 · Steam inventory ]</p>
+          <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-tighter text-balance max-w-3xl leading-[1.02] sm:text-6xl">
+            Every skin, case and sticker, <span className="text-gradient">in one spreadsheet</span>
           </h1>
           <p className="mt-4 text-muted font-light text-lg max-w-2xl">
             Paste a public Steam profile. You get names, wear, rarity, collection and trade status for each item, then a CSV that opens cleanly in Excel or Google Sheets.
@@ -124,7 +125,7 @@ export default function HomePage() {
               placeholder="steamcommunity.com/id/your-name"
               autoComplete="off"
               spellCheck="false"
-              className="flex-1 min-w-0 h-12 px-4 rounded bg-surface border border-line font-mono text-sm placeholder:text-faint focus:outline-none focus:border-accent"
+              className="flex-1 min-w-0 h-12 px-5 rounded-full bg-surface border border-line font-mono text-sm placeholder:text-faint focus:outline-none focus:border-accent"
               disabled={status === 'loading'}
             />
             <button type="submit" className="btn-accent h-12 px-6" disabled={status === 'loading'}>
@@ -137,6 +138,7 @@ export default function HomePage() {
 
           {status === 'error' && error && <ErrorCard error={error} />}
         </section>
+        </div>
 
         {status === 'loading' && (
           <section className="mx-auto max-w-6xl px-4 sm:px-6 pb-16" aria-busy="true">

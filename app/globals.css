@@ -5,25 +5,41 @@
 @layer base {
   :root { color-scheme: dark; }
   body { @apply bg-bg text-ink font-sans antialiased; }
-  :focus-visible { outline: 2px solid #FF4D1A; outline-offset: 2px; }
+  :focus-visible { outline: 2px solid #FF4400; outline-offset: 2px; }
 }
 
 @layer components {
   .eyebrow {
-    @apply inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.12em] text-accent;
+    @apply inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.12em] text-accent-2;
   }
-  .eyebrow::before { content: ''; @apply w-1.5 h-1.5 bg-current; }
   .btn-accent {
-    @apply inline-flex items-center justify-center rounded bg-accent text-ink-inverse font-medium
+    @apply inline-flex items-center justify-center rounded-full bg-accent text-white font-semibold
       hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center h-9 px-3.5 rounded border border-white/20 text-sm
+    @apply inline-flex items-center justify-center h-9 px-4 rounded-full border border-white/20 text-sm
       hover:border-white/60 transition whitespace-nowrap;
   }
   .chip {
     @apply inline-flex items-center rounded-sm border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide whitespace-nowrap;
   }
+}
+
+@layer components {
+  .hero-grid { position: relative; overflow: hidden; }
+  .hero-grid::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .55;
+    background-image: linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 30%, transparent 75%);
+  }
+  .hero-grid::after {
+    content: ''; position: absolute; width: 640px; height: 640px; right: -220px; top: -260px; pointer-events: none;
+    background: radial-gradient(circle, rgba(255, 68, 0, .3), transparent 62%);
+  }
+  .hero-grid > * { position: relative; z-index: 1; }
+  .text-gradient { background: linear-gradient(90deg, #FF4400, #FF8A3D); -webkit-background-clip: text; background-clip: text; color: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {

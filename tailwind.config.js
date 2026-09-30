@@ -11,10 +11,11 @@ module.exports = {
         'ink-inverse': '#0B0B0C',
         muted: '#A1A1AA',
         faint: '#71717A',
-        accent: '#FF4D1A',
+        accent: '#FF4400',
+        'accent-2': '#FF8A3D',
       },
       fontFamily: {
-        sans: ['"Instrument Sans"', '-apple-system', 'Segoe UI', 'system-ui', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'Segoe UI', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'SF Mono', 'ui-monospace', 'Menlo', 'monospace'],
       },
     },
