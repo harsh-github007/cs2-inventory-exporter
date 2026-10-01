@@ -1,341 +1,46 @@
 'use client';
-
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'motion/react';
+import { ArrowUpRight, ArrowRight, DownloadSimple, MagnifyingGlass, SquaresFour, List, X, Check, Cube, ShieldCheck, FileCsv, GithubLogo } from '@phosphor-icons/react';
 import { toCSV } from '../lib/csv.mjs';
-
-const RARITY_ORDER = [
-  'Contraband', 'Extraordinary', 'Covert', 'Classified', 'Restricted', 'Mil-Spec Grade', 'Mil-Spec',
-  'Exotic', 'Remarkable', 'Superior', 'Distinguished', 'Master', 'Exceptional', 'Industrial Grade',
-  'High Grade', 'Consumer Grade', 'Base Grade',
-];
-const rarityRank = (r) => { const i = RARITY_ORDER.indexOf(r); return i === -1 ? RARITY_ORDER.length : i; };
-const fmt = (n) => n.toLocaleString('en-US');
-const SHOW_MAX = 300;
-
-function download(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-export default function HomePage() {
-  const [profile, setProfile] = useState('');
-  const [status, setStatus] = useState('idle'); // idle | loading | done | error
-  const [error, setError] = useState(null);
-  const [data, setData] = useState(null);
-  const [query, setQuery] = useState('');
-  const [rarity, setRarity] = useState('');
-  const [tradableOnly, setTradableOnly] = useState(false);
-  const [sort, setSort] = useState('inventory');
-  const [grouped, setGrouped] = useState(true);
-
-  async function load(e) {
-    e.preventDefault();
-    if (!profile.trim()) { setError({ message: 'Paste a Steam profile link first.' }); setStatus('error'); return; }
-    setStatus('loading'); setError(null);
-    try {
-      const res = await fetch('/api/get-inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw Object.assign(new Error(body.message || 'Something went wrong.'), { code: body.code });
-      setData(body); setQuery(''); setRarity(''); setTradableOnly(false); setSort('inventory');
-      setStatus('done');
-    } catch (err) {
-      setError({ message: err.message, code: err.code });
-      setStatus('error');
-    }
-  }
-
-  const stats = useMemo(() => {
-    if (!data) return null;
-    const items = data.items;
-    return {
-      total: items.reduce((s, i) => s + i.amount, 0),
-      unique: new Set(items.map((i) => i.name)).size,
-      tradable: items.filter((i) => i.tradable).length,
-      marketable: items.filter((i) => i.marketable).length,
-      rarities: [...new Set(items.map((i) => i.rarity).filter(Boolean))].sort((a, b) => rarityRank(a) - rarityRank(b)),
-    };
-  }, [data]);
-
-  const filtered = useMemo(() => {
-    if (!data) return [];
-    const q = query.trim().toLowerCase();
-    let rows = data.items.filter((i) =>
-      (!q || i.name.toLowerCase().includes(q) || i.collection.toLowerCase().includes(q)) &&
-      (!rarity || i.rarity === rarity) &&
-      (!tradableOnly || i.tradable));
-    if (sort === 'rarity') rows = [...rows].sort((a, b) => rarityRank(a.rarity) - rarityRank(b.rarity) || a.name.localeCompare(b.name));
-    if (sort === 'name') rows = [...rows].sort((a, b) => a.name.localeCompare(b.name));
-    return rows;
-  }, [data, query, rarity, tradableOnly, sort]);
-
-  // Collapse identical items (same name and trade state) into one row with a count.
-  const shown = useMemo(() => {
-    if (!grouped) return filtered;
-    const byKey = new Map();
-    for (const i of filtered) {
-      const key = `${i.name}|${i.tradable}|${i.tradeHold}`;
-      const hit = byKey.get(key);
-      if (hit) hit.amount += i.amount;
-      else byKey.set(key, { ...i });
-    }
-    return [...byKey.values()];
-  }, [filtered, grouped]);
-
-  const isFiltered = data && filtered.length !== data.items.length;
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-line">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5 font-semibold tracking-tight">
-            <span className="grid place-items-center w-7 h-7 rounded-md bg-accent text-ink-inverse font-mono text-xs">CS</span>
-            Inventory Exporter
-          </div>
-          <a href="https://github.com/harsh-github007/cs2-inventory-exporter" className="btn-ghost">Source →</a>
-        </div>
-      </header>
-
-      <main className="flex-1">
-        <div className="hero-grid border-b border-line">
-        <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-16 sm:pt-24 pb-12">
-          <p className="eyebrow">[ Counter-Strike 2 · Steam inventory ]</p>
-          <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-tighter text-balance max-w-3xl leading-[1.02] sm:text-6xl">
-            Every skin, case and sticker, <span className="text-gradient">in one spreadsheet</span>
-          </h1>
-          <p className="mt-4 text-muted font-light text-lg max-w-2xl">
-            Paste a public Steam profile. You get names, wear, rarity, collection and trade status for each item, then a CSV that opens cleanly in Excel or Google Sheets.
-          </p>
-
-          <form onSubmit={load} className="mt-8 flex flex-col sm:flex-row gap-3 max-w-3xl">
-            <label htmlFor="profile" className="sr-only">Steam profile</label>
-            <input
-              id="profile"
-              value={profile}
-              onChange={(e) => setProfile(e.target.value)}
-              placeholder="steamcommunity.com/id/your-name"
-              autoComplete="off"
-              spellCheck="false"
-              className="flex-1 min-w-0 h-12 px-5 rounded-full bg-surface border border-line font-mono text-sm placeholder:text-faint focus:outline-none focus:border-accent"
-              disabled={status === 'loading'}
-            />
-            <button type="submit" className="btn-accent h-12 px-6" disabled={status === 'loading'}>
-              {status === 'loading' ? 'Loading inventory…' : 'Load inventory'}
-            </button>
-          </form>
-          <p className="mt-3 text-sm text-faint">
-            Works with <code className="font-mono text-muted">/id/name</code> links, <code className="font-mono text-muted">/profiles/7656…</code> links, a SteamID64, or just the custom URL name.
-          </p>
-
-          {status === 'error' && error && <ErrorCard error={error} />}
-        </section>
-        </div>
-
-        {status === 'loading' && (
-          <section className="mx-auto max-w-6xl px-4 sm:px-6 pb-16" aria-busy="true">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-line border border-line rounded-md overflow-hidden">
-              {[0, 1, 2, 3].map((i) => <div key={i} className="bg-surface h-24 animate-pulse" />)}
-            </div>
-          </section>
-        )}
-
-        {status === 'done' && data && (
-          <section className="mx-auto max-w-6xl px-4 sm:px-6 pb-16" aria-label="Inventory">
-            <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
-              <div>
-                <p className="eyebrow">Loaded</p>
-                <p className="mt-2 font-mono text-sm text-muted">SteamID64 {data.steamId}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {isFiltered && (
-                  <button className="btn-ghost h-11" onClick={() => download(`cs2_inventory_${data.steamId}_filtered.csv`, toCSV(filtered))}>
-                    Download filtered ({fmt(filtered.length)})
-                  </button>
-                )}
-                <button
-                  className="btn-accent h-11 px-5"
-                  disabled={!data.items.length}
-                  onClick={() => download(`cs2_inventory_${data.steamId}.csv`, toCSV(data.items))}
-                >
-                  Download CSV ({fmt(data.items.length)} rows)
-                </button>
-              </div>
-            </div>
-
-            <dl className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-line border border-line rounded-md overflow-hidden">
-              <Stat label="Items" value={stats.total} />
-              <Stat label="Unique items" value={stats.unique} />
-              <Stat label="Tradable now" value={stats.tradable} />
-              <Stat label="Marketable" value={stats.marketable} />
-            </dl>
-
-            {data.items.length === 0 ? (
-              <p className="mt-6 text-muted">This inventory is public but has no CS2 items.</p>
-            ) : (
-              <>
-                <div className="mt-6 flex flex-col md:flex-row gap-3 md:items-center">
-                  <label htmlFor="q" className="sr-only">Search items</label>
-                  <input id="q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or collection"
-                    className="h-11 md:w-72 px-3 rounded bg-surface border border-line text-sm focus:outline-none focus:border-accent" />
-                  <label htmlFor="rarity" className="sr-only">Rarity</label>
-                  <select id="rarity" value={rarity} onChange={(e) => setRarity(e.target.value)}
-                    className="h-11 px-3 rounded bg-surface border border-line text-sm focus:outline-none focus:border-accent">
-                    <option value="">All rarities</option>
-                    {stats.rarities.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <label htmlFor="sort" className="sr-only">Sort</label>
-                  <select id="sort" value={sort} onChange={(e) => setSort(e.target.value)}
-                    className="h-11 px-3 rounded bg-surface border border-line text-sm focus:outline-none focus:border-accent">
-                    <option value="inventory">Inventory order</option>
-                    <option value="rarity">Rarity, highest first</option>
-                    <option value="name">Name, A to Z</option>
-                  </select>
-                  <label className="flex items-center gap-2 text-sm text-muted h-11 cursor-pointer md:ml-auto">
-                    <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="w-5 h-5 accent-[#FF4D1A]" />
-                    Group duplicates
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-muted h-11 cursor-pointer">
-                    <input type="checkbox" checked={tradableOnly} onChange={(e) => setTradableOnly(e.target.checked)} className="w-5 h-5 accent-[#FF4D1A]" />
-                    Tradable only
-                  </label>
-                </div>
-
-                <ItemList rows={shown.slice(0, SHOW_MAX)} />
-                <p className="mt-3 text-sm text-faint">
-                  {shown.length > SHOW_MAX
-                    ? `Showing the first ${SHOW_MAX} of ${fmt(shown.length)} rows. The CSV includes every item.`
-                    : `${fmt(filtered.length)} of ${fmt(data.items.length)} items shown${grouped && shown.length < filtered.length ? ` in ${fmt(shown.length)} rows` : ''}. The CSV has one row per item.`}
-                </p>
-              </>
-            )}
-          </section>
-        )}
-      </main>
-
-      <footer className="border-t border-line">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-faint">
-          <span>Reads public inventories only. Nothing is stored.</span>
-          <span>Not affiliated with Valve or Steam.</span>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <div className="bg-surface px-5 py-4">
-      <dt className="font-mono text-[11px] uppercase tracking-wider text-faint">{label}</dt>
-      <dd className="mt-1 text-2xl sm:text-3xl font-medium tracking-tight tabular-nums">{fmt(value)}</dd>
-    </div>
-  );
-}
-
-function ErrorCard({ error }) {
-  return (
-    <div role="alert" className="mt-6 max-w-3xl rounded-md border border-[#FF4D1A]/40 bg-[#FF4D1A]/10 p-4">
-      <p className="font-medium">{error.message}</p>
-      {error.code === 'private' && (
-        <p className="mt-2 text-sm text-muted">
-          On Steam, open your profile, choose <b className="text-ink">Edit Profile → Privacy Settings</b>, and set both <b className="text-ink">My profile</b> and <b className="text-ink">Inventory</b> to Public. Steam can take a few minutes to apply the change.
-        </p>
-      )}
-      {error.code === 'rate_limited' && (
-        <p className="mt-2 text-sm text-muted">Steam limits how often an inventory can be read from one server. Results are cached for two minutes after a successful load.</p>
-      )}
-    </div>
-  );
-}
-
-function StatusChip({ item }) {
-  if (item.tradable) return <span className="chip text-[#22C55E] border-[#22C55E]/40">Tradable</span>;
-  if (item.tradeHold) return <span className="chip text-[#F59E0B] border-[#F59E0B]/40" title={item.tradeHold}>Trade hold</span>;
-  return <span className="chip text-faint border-line">Not tradable</span>;
-}
-
-function ItemList({ rows }) {
-  return (
-    <div className="mt-4 border border-line rounded-md overflow-hidden">
-      {/* table on wider screens */}
-      <table className="hidden md:table w-full text-sm">
-        <thead className="bg-surface text-left">
-          <tr className="font-mono text-[11px] uppercase tracking-wider text-faint">
-            <th className="px-4 py-3 font-medium">Item</th>
-            <th className="px-4 py-3 font-medium">Rarity</th>
-            <th className="px-4 py-3 font-medium">Exterior</th>
-            <th className="px-4 py-3 font-medium">Collection</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium"><span className="sr-only">Links</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((i) => (
-            <tr key={i.assetId} className="border-t border-line hover:bg-surface/60">
-              <td className="px-4 py-2.5">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Icon item={i} />
-                  <span className="truncate max-w-[22rem]" title={i.name}>{i.name}</span>
-                  {i.amount > 1 && <span className="font-mono text-xs text-faint">×{i.amount}</span>}
-                </div>
-              </td>
-              <td className="px-4 py-2.5"><Rarity item={i} /></td>
-              <td className="px-4 py-2.5 text-muted">{i.exterior || '—'}</td>
-              <td className="px-4 py-2.5 text-muted truncate max-w-[14rem]" title={i.collection}>{i.collection || '—'}</td>
-              <td className="px-4 py-2.5"><StatusChip item={i} /></td>
-              <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                {i.marketUrl && <a href={i.marketUrl} target="_blank" rel="noreferrer" className="text-muted hover:text-accent underline-offset-4 hover:underline">Market</a>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* cards on phones */}
-      <ul className="md:hidden divide-y divide-line">
-        {rows.map((i) => (
-          <li key={i.assetId} className="flex gap-3 p-3">
-            <Icon item={i} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm leading-snug break-words">{i.name}{i.amount > 1 && <span className="font-mono text-xs text-faint"> ×{i.amount}</span>}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-                <Rarity item={i} />
-                {i.exterior && <span className="text-muted">{i.exterior}</span>}
-                <StatusChip item={i} />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Icon({ item }) {
-  return (
-    <div className="w-12 h-9 shrink-0 rounded bg-surface border-b-2 grid place-items-center overflow-hidden"
-      style={{ borderColor: item.rarityColor || 'transparent' }}>
-      {/* Steam's CDN already serves 96px thumbnails, so next/image adds nothing here */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {item.iconUrl && <img src={item.iconUrl} alt="" loading="lazy" className="max-w-full max-h-full object-contain" />}
-    </div>
-  );
-}
-
-function Rarity({ item }) {
-  if (!item.rarity) return <span className="text-faint">—</span>;
-  return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span className="w-2 h-2" style={{ background: item.rarityColor || 'currentColor' }} />
-      <span style={{ color: item.rarityColor || undefined }}>{item.rarity}</span>
-    </span>
-  );
+import sample from '../lib/demo.json';
+const ORDER=['Contraband','Extraordinary','Covert','Classified','Restricted','Mil-Spec Grade','Mil-Spec','Exotic','Remarkable','Superior','Distinguished','Master','Exceptional','Industrial Grade','High Grade','Consumer Grade','Base Grade'];
+const rank=r=>ORDER.indexOf(r)<0?99:ORDER.indexOf(r);
+const fmt=n=>n.toLocaleString('en-US');
+function download(name,rows){const url=URL.createObjectURL(new Blob([toCSV(rows)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+export default function HomePage(){
+ const [profile,setProfile]=useState(''),[status,setStatus]=useState('idle'),[error,setError]=useState(null),[data,setData]=useState(null),[query,setQuery]=useState(''),[rarity,setRarity]=useState(''),[tradable,setTradable]=useState(false),[sort,setSort]=useState('inventory'),[grouped,setGrouped]=useState(true),[view,setView]=useState('grid'),[selected,setSelected]=useState(null),[exported,setExported]=useState(false);
+ const reduced=useReducedMotion(),inventory=useRef(null),request=useRef(null),dialog=useRef(null);
+ useEffect(()=>()=>request.current?.abort(),[]);
+ useEffect(()=>{if(selected)dialog.current?.showModal();},[selected]);
+ function reset(body){setData(body);setQuery('');setRarity('');setTradable(false);setSort('inventory');setStatus('done');setExported(false);}
+ function demo(){request.current?.abort();setError(null);reset(sample);}
+ async function load(e){e.preventDefault();if(!profile.trim()){setError({message:'Paste a Steam profile link or ID to get started.'});return;}request.current?.abort();const controller=new AbortController();request.current=controller;setStatus('loading');setError(null);try{const r=await fetch('/api/get-inventory',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile}),signal:controller.signal});const b=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(b.message||'Could not load this inventory. Please try again.'),{code:b.code});reset(b);}catch(e){if(e.name==='AbortError')return;setError({message:e.message,code:e.code});setStatus(data?'done':'idle');}}
+ const stats=useMemo(()=>data?{total:data.items.reduce((s,i)=>s+i.amount,0),unique:new Set(data.items.map(i=>i.name)).size,tradable:data.items.filter(i=>i.tradable).reduce((s,i)=>s+i.amount,0),rarities:[...new Set(data.items.map(i=>i.rarity).filter(Boolean))].sort((a,b)=>rank(a)-rank(b))}:null,[data]);
+ const filtered=useMemo(()=>{if(!data)return[];const q=query.toLowerCase().trim();let rows=data.items.filter(i=>(!q||i.name.toLowerCase().includes(q)||(i.collection||'').toLowerCase().includes(q))&&(!rarity||rarity===i.rarity)&&(!tradable||i.tradable));if(sort==='rarity')rows=[...rows].sort((a,b)=>rank(a.rarity)-rank(b.rarity));if(sort==='name')rows=[...rows].sort((a,b)=>a.name.localeCompare(b.name));return rows;},[data,query,rarity,tradable,sort]);
+ const shown=useMemo(()=>{if(!grouped)return filtered;const m=new Map();for(const i of filtered){const k=`${i.name}|${i.tradable}|${i.tradeHold}`;if(m.has(k))m.get(k).amount+=i.amount;else m.set(k,{...i});}return[...m.values()];},[filtered,grouped]);
+ function exportRows(rows){download(`cs2_inventory_${data.steamId}${rows!==data.items?'_filtered':''}.csv`,rows);setExported(true);}
+ return <MotionConfig reducedMotion="user"><div className="app-shell">
+ <header className="topbar"><a className="brand" href="#top"><span className="brand-mark"><Cube size={23} weight="bold"/></span><span>CS2 <strong>Inventory</strong></span></a><a className="source-link" href="https://github.com/harsh-github007/cs2-inventory-exporter" target="_blank" rel="noreferrer"><GithubLogo size={19}/>Source<ArrowUpRight size={14}/></a></header>
+ <main id="top">
+ <section className={`intro ${data?'intro-compact':''}`}>
+ <div className="intro-copy"><motion.h1 layout>{data?<>Your inventory.<br/><span>Ready to explore.</span></>:<>Your collection.<br/><span>Out of the game.</span></>}</motion.h1><p>From your Steam inventory to a clean spreadsheet.<br/>Every finish, every detail. Ready to work with.</p>
+ <form onSubmit={load} className="profile-form"><label htmlFor="profile">Public Steam profile</label><div className="profile-control"><input id="profile" value={profile} onChange={e=>setProfile(e.target.value)} placeholder="steamcommunity.com/id/your-name" autoComplete="off" spellCheck="false"/><button className="primary" disabled={status==='loading'}>{status==='loading'?'Reading Steam…':'Open inventory'}<ArrowRight size={19}/></button></div><p className="input-help">Profile URL, SteamID64 or custom profile name. No sign-in needed.</p></form>
+ <div className="sample-line"><button className="text-button" onClick={demo}>Try the sample collection<ArrowUpRight size={16}/></button><span>See it before you connect.</span></div>
+ <AnimatePresence>{error&&<motion.div role="alert" className="error-message" initial={{opacity:0,y:reduced?0:6}} animate={{opacity:1,y:0}} exit={{opacity:0}}><b>{error.message}</b>{error.code==='private'&&<p>Steam → Edit Profile → Privacy Settings: set your profile and inventory to Public.</p>}{error.code==='rate_limited'&&<p>Steam is limiting requests. Wait a few minutes, then try again.</p>}</motion.div>}</AnimatePresence>
+ </div>
+ {!data&&<div className="collection-scene" aria-label="Illustrative sample collection"><div className="scene-caption"><span>THE LOADOUT</span><span>Sample collection</span></div><motion.div className="showcase-item main-item" initial={{opacity:0,y:reduced?0:20,rotate:-3}} animate={{opacity:1,y:0,rotate:-3}} transition={{duration:.5,ease:[.16,1,.3,1]}}><span className="item-edition">CLASSIFIED · RIFLE</span><img src="/items/item-0.png" alt="AK-47 Redline"/><div><b>AK-47</b><span>Redline</span></div><i className="rarity-stripe"/></motion.div><motion.div className="showcase-item second-item" initial={{opacity:0,y:reduced?0:30,rotate:5}} animate={{opacity:1,y:0,rotate:5}} transition={{duration:.5,delay:.08,ease:[.16,1,.3,1]}}><img src="/items/item-1.png" alt="AWP Asiimov"/><div><b>AWP</b><span>Asiimov</span></div></motion.div><div className="export-ticket"><FileCsv size={25}/><div><b>Your inventory.csv</b><span>Names · wear · rarity · trade status</span></div><Check size={20}/></div></div>}
+ </section>
+ <AnimatePresence mode="wait">{status==='loading'?<motion.section key="loading" className="loading-state" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} aria-live="polite" aria-busy="true"><span className="loading-dot"/><h2>Reading your collection</h2><p>Fetching item details from Steam. Large inventories may take a little longer.</p><button className="text-button" onClick={()=>{request.current?.abort();setStatus(data?'done':'idle');}}>Cancel</button></motion.section>:data&&<motion.section key="inventory" ref={inventory} className="inventory" initial={{opacity:0,y:reduced?0:18}} animate={{opacity:1,y:0}} transition={{duration:.3}} aria-label="Inventory">
+ <div className="inventory-heading"><div><div className="collection-label">{data.steamId==='sample'?'SAMPLE COLLECTION':'PUBLIC INVENTORY'}</div><h2>The collection</h2><p>{data.steamId==='sample'?'Illustrative items. Export is available for testing.':`SteamID64 ${data.steamId}`}</p></div><div className="export-actions">{filtered.length!==data.items.length&&<button className="secondary" onClick={()=>exportRows(filtered)} disabled={!filtered.length}>Export filtered ({filtered.length})</button>}<button className="primary" onClick={()=>exportRows(data.items)} disabled={!data.items.length}>{exported?<Check size={18}/>:<DownloadSimple size={18}/>} {exported?'Download started':'Export CSV'}<span>{data.items.length}</span></button><span role="status" className="sr-only">{exported?'CSV download started':''}</span></div></div>
+ <div className="collection-summary"><span><b>{fmt(stats.total)}</b> items</span><span><b>{fmt(stats.unique)}</b> unique finishes</span><span><b>{fmt(stats.tradable)}</b> tradable now</span><span className="summary-note"><ShieldCheck size={17}/>Public data. Read only.</span></div>
+ <div className="filters"><label className="search"><MagnifyingGlass size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find a skin or collection" aria-label="Search items"/></label><select aria-label="Rarity" value={rarity} onChange={e=>setRarity(e.target.value)}><option value="">All rarities</option>{stats.rarities.map(r=><option key={r}>{r}</option>)}</select><select aria-label="Sort items" value={sort} onChange={e=>setSort(e.target.value)}><option value="inventory">Inventory order</option><option value="rarity">Rarity first</option><option value="name">Name A–Z</option></select><div className="view-switch" role="group" aria-label="Inventory view"><button aria-label="Grid view" aria-pressed={view==='grid'} onClick={()=>setView('grid')}><SquaresFour size={20}/></button><button aria-label="List view" aria-pressed={view==='list'} onClick={()=>setView('list')}><List size={20}/></button></div></div>
+ <div className="filter-options"><label><input type="checkbox" checked={grouped} onChange={e=>setGrouped(e.target.checked)}/>Group duplicates</label><label><input type="checkbox" checked={tradable} onChange={e=>setTradable(e.target.checked)}/>Tradable only</label>{(query||rarity||tradable)&&<button className="clear-filters" onClick={()=>{setQuery('');setRarity('');setTradable(false);}}>Clear filters<X size={13}/></button>}<span>{shown.length} rows shown{shown.length>120?' · First 120 previewed':''}</span></div>
+ {shown.length?<div className={view==='grid'?'item-grid':'item-list'}>{shown.slice(0,120).map(i=><motion.button layout="position" transition={{duration:.2}} key={i.assetId} className="inventory-item" onClick={()=>setSelected(i)} whileTap={reduced?{}:{scale:.985}} style={{'--rarity':i.rarityColor||'#737373'}}><div className="item-art">{i.iconUrl&&<img src={i.iconUrl} alt="" loading="lazy"/>}{i.amount>1&&<span className="quantity">×{i.amount}</span>}</div><div className="item-copy"><span className="item-type">{i.weapon||i.type}</span><h3>{view==='grid'?i.name.replace(/^.*? \| /,'').replace(/ \([^)]*\)$/ ,''):i.name}</h3><p>{i.exterior||i.rarity||'Item'}</p><div className="item-status"><span className="rarity-name">{i.rarity}</span><span>{i.tradable?'Tradable':i.tradeHold?'Trade hold':'Not tradable'}</span></div></div><ArrowUpRight className="inspect-arrow" size={18}/></motion.button>)}</div>:<div className="empty-state"><h3>{data.items.length?'No matching items':'This inventory is empty'}</h3><p>{data.items.length?'Try another search or clear your filters.':'There are no CS2 items in this public inventory.'}</p>{data.items.length>0&&<button className="secondary" onClick={()=>{setQuery('');setRarity('');setTradable(false);}}>Clear filters</button>}</div>}
+ <p className="export-note">CSV exports include every selected asset, with one row per asset. Grouping only changes this preview.</p>
+ </motion.section>}</AnimatePresence>
+ <section className="workflow" id="how"><div><h2>From loadout<br/>to spreadsheet.</h2><p>No trading. No account access.<br/>Just a better view of what you own.</p></div><ol><li><span>01</span><div><h3>Connect a public profile</h3><p>Paste a Steam link or ID. Only public CS2 inventory data is requested.</p></div></li><li><span>02</span><div><h3>Make sense of your collection</h3><p>Find finishes, compare rarity, and separate items that are ready to trade.</p></div></li><li><span>03</span><div><h3>Take it anywhere</h3><p>Download a spreadsheet-ready CSV for Excel or Google Sheets.</p></div></li></ol></section>
+ </main><footer><span>CS2 Inventory Exporter</span><span>Not affiliated with Valve or Steam.</span><a href="#how">How it works <ArrowUpRight size={14}/></a></footer>
+ <dialog ref={dialog} aria-labelledby="item-detail-title" className="item-dialog" onCancel={()=>setSelected(null)} onClose={()=>setSelected(null)} onClick={e=>{if(e.target===e.currentTarget){dialog.current.close();setSelected(null);}}}>{selected&&<><button className="dialog-close secondary" aria-label="Close item details" onClick={()=>{dialog.current.close();setSelected(null);}}><X size={20}/></button><div className="dialog-art"><img src={selected.iconUrl} alt={selected.name}/></div><div className="dialog-copy"><p>{selected.rarity} · {selected.exterior||selected.type}</p><h2 id="item-detail-title">{selected.name}</h2><dl><div><dt>Collection</dt><dd>{selected.collection||'Not specified'}</dd></div><div><dt>Trade status</dt><dd>{selected.tradable?'Tradable':selected.tradeHold||'Not tradable'}</dd></div><div><dt>Quantity</dt><dd>{selected.amount}</dd></div></dl>{selected.marketUrl&&<a className="primary" href={selected.marketUrl} target="_blank" rel="noreferrer">View on Steam Market<ArrowUpRight size={18}/></a>}</div></>}</dialog>
+ </div></MotionConfig>;
 }
