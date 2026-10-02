@@ -13,3 +13,10 @@
 @media (prefers-reduced-motion: no-preference) { .item-dialog[open] { animation: detail-enter 220ms cubic-bezier(.16,1,.3,1); } @keyframes detail-enter { from { opacity:0; transform:translateY(12px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } } }
 
 .clear-filters{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--orange);font-size:12px;padding:8px 0}.clear-filters:hover{text-decoration:underline;text-underline-offset:3px}.item-grid .item-copy h3{font-size:16px;letter-spacing:-.02em}.item-grid .item-copy>p{font-size:12px}.item-grid .item-status{font-size:11px}
+
+/* Shared portfolio palette: warm neutral surfaces and green actions. */
+:root{--portfolio-bg:#f4f3ee;--portfolio-surface:#fffefa;--portfolio-ink:#243229;--portfolio-muted:#5c675f;--portfolio-line:#d6dcd5;--portfolio-accent:#315b46;--portfolio-hover:#244635;--portfolio-soft:#e5ece4}
+:root,html[data-theme="light"]{--ink:var(--portfolio-ink);--muted:var(--portfolio-muted);--line:var(--portfolio-line);--paper:var(--portfolio-bg);--white:var(--portfolio-surface);--orange:var(--portfolio-accent);color-scheme:light}
+::selection{background:#d4e2d3;color:#243229}a,button,input,select{accent-color:var(--portfolio-accent)}:focus-visible{outline:2px solid var(--portfolio-accent);outline-offset:4px}h1{letter-spacing:-.035em;text-wrap:balance;overflow-wrap:normal}h1 em{color:var(--portfolio-accent)}
+.hero-copy>.eyebrow,.hero-copy>.hero-label,.section-head .eyebrow,.methodology>div>.eyebrow,.hero .wrap>.label,.section-label,.top-inner .eyebrow{display:none}
+.button.primary:hover,.btn.primary:hover,.primary:hover{background:var(--portfolio-hover)}
